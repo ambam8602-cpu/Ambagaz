@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>TRACKING SYSTEM</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+body{
+margin:0;
+font-family:Consolas, monospace;
+background:#050505;
+color:#ff3b3b;
+}
+.container{
+max-width:1000px;
+margin:auto;
+padding:20px;
+}
+h1{
+text-align:center;
+letter-spacing:4px;
+text-shadow:0 0 15px red;
+}
+.input-box{
+text-align:center;
+background:#111;
+padding:25px;
+border-radius:10px;
+border:1px solid #550000;
+box-shadow:0 0 15px rgba(255,0,0,0.2);
+}
+input{
+width:90%;
+max-width:400px;
+padding:14px;
+background:#000;
+border:1px solid #550000;
+border-radius:6px;
+color:#ff3b3b;
+text-align:center;
+font-size:16px;
+}
+button{
+width:90%;
+max-width:400px;
+padding:14px;
+margin-top:15px;
+background:#220000;
+border:1px solid #ff3b3b;
+border-radius:6px;
+color:white;
+font-weight:bold;
+letter-spacing:2px;
+cursor:pointer;
+}
+button:hover{
+background:#550000;
+}
+.loader{
+width:26px;
+height:26px;
+border:3px solid #330000;
+border-top:3px solid red;
+border-radius:50%;
+animation:spin 1s linear infinite;
+margin:15px auto;
+display:none;
+}
+@keyframes spin{
+0%{transform:rotate(0deg);}
+100%{transform:rotate(360deg);}
+}
+.progress{
+height:6px;
+background:#111;
+margin-top:10px;
+border-radius:5px;
+overflow:hidden;
+display:none;
+}
+.progress-bar{
+height:100%;
+width:0%;
+background:red;
+transition:width 0.2s;
+}
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:20px;
+margin-top:20px;
+}
+.card{
+background:#111;
+padding:15px;
+border-radius:10px;
+border:1px solid #550000;
+box-shadow:0 0 15px rgba(255,0,0,0.15);
+}
+#map{
+height:350px;
+border-radius:10px;
+position:relative;
+overflow:hidden;
+}
+.radar{
+position:absolute;
+width:350px;
+height:350px;
+border-radius:50%;
+background:conic-gradient(rgba(255,0,0,0.25), transparent 70%);
+animation:rotate 4s linear infinite;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+pointer-events:none;
+}
+@keyframes rotate{
+from{transform:translate(-50%,-50%) rotate(0deg)}
+to{transform:translate(-50%,-50%) rotate(360deg)}
+}
+.target{
+width:14px;
+height:14px;
+background:red;
+border-radius:50%;
+position:relative;
+}
+@keyframes pulse{
+0%{transform:scale(0.3);opacity:1;}
+70%{transform:scale(2.5);opacity:0;}
+100%{opacity:0;}
+}
+.target::after{
+content:"";
+position:absolute;
+top:-20px;
+left:-20px;
+width:55px;
+height:55px;
+border:2px solid red;
+border-radius:50%;
+animation:pulse 2s infinite;
+}
+.footer{
+text-align:center;
+font-size:11px;
+margin-top:20px;
+color:#660000;
+}
+@media(max-width:768px){
+.grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>TRACKING SYSTEM</h1>
+
+<div class="input-box">
+<input type="tel" id="phoneInput" placeholder="Enter target number...">
+<button onclick="startScan()">ANALYZE SIGNAL</button>
+<div class="loader" id="loader"></div>
+<div class="progress">
+<div class="progress-bar" id="bar"></div>
+</div>
+</div>
+
+<div id="result" class="grid" style="display:none;">
+<div class="card">
+<img id="deviceImg" width="90"><br><br>
+<div id="deviceInfo"></div>
+<pre id="infoText"></pre>
+<button id="openMapBtn">Open in Google Maps</button>
+<button id="openEarthBtn">Open in Google Earth</button>
+</div>
+
+<div class="card">
+<div id="map"></div>
+</div>
+</div>
+
+<div class="footer">
+⚠ Advanced Signal Tracking Activated 
+ - BAGAZ
+</div>
+</div>
+
+<script>
+let map;
+let currentCoord;
+
+const devices=[
+{name:"Samsung Galaxy A51",img:"https://fdn2.gsmarena.com/vv/pics/samsung/samsung-galaxy-a51-1.jpg"},
+{name:"Xiaomi Redmi Note 10",img:"https://fdn2.gsmarena.com/vv/pics/xiaomi/xiaomi-redmi-note10-1.jpg"},
+{name:"OPPO A54",img:"https://fdn2.gsmarena.com/vv/pics/oppo/oppo-a54-4g-1.jpg"},
+{name:"Vivo Y20",img:"https://fdn2.gsmarena.com/vv/pics/vivo/vivo-y20-1.jpg"},
+{name:"Realme 8",img:"https://fdn2.gsmarena.com/vv/pics/realme/realme-8-1.jpg"},
+{name:"Huawei P30",img:"https://fdn2.gsmarena.com/vv/pics/huawei/huawei-p30-1.jpg"},
+{name:"iPhone 11",img:"https://fdn2.gsmarena.com/vv/pics/apple/apple-iphone-11-1.jpg"}
+];
+
+function randomMedan(){
+return{
+lat:3.50 + Math.random()*0.15,
+lng:98.60 + Math.random()*0.15
+};
+}
+
+function randomIP(){
+return "36."+Math.floor(Math.random()*255)+"."+Math.floor(Math.random()*255)+"."+Math.floor(Math.random()*255);
+}
+
+function typeWriter(el,text,speed=10){
+el.textContent="";
+let i=0;
+function typing(){
+if(i<text.length){
+el.textContent+=text.charAt(i);
+i++;
+setTimeout(typing,speed);
+}}
+typing();
+}
+
+function startScan(){
+let input=document.getElementById("phoneInput").value.trim();
+if(input.length<8){alert("Enter valid number"); return;}
+document.getElementById("loader").style.display="block";
+document.querySelector(".progress").style.display="block";
+document.getElementById("result").style.display="none";
+let bar=document.getElementById("bar");
+let width=0;
+let interval=setInterval(()=>{
+width+=3; bar.style.width=width+"%";
+if(width>=100){
+clearInterval(interval);
+document.getElementById("loader").style.display="none";
+showResult();
+}},70);
+}
+
+function showResult(){
+document.querySelector(".progress").style.display="none";
+document.getElementById("bar").style.width="0%";
+document.getElementById("result").style.display="grid";
+
+currentCoord=randomMedan();
+let device=devices[Math.floor(Math.random()*devices.length)];
+let os=device.name.includes("iPhone")?"iOS":"Android";
+
+document.getElementById("deviceImg").src=device.img;
+document.getElementById("deviceInfo").innerHTML=
+"DEVICE : "+device.name+"<br>"+
+"OS : "+os+"<br>"+
+"STATUS : CONNECTED";
+
+let text=
+"SIGNAL LOCKED\n\n"+
+"Coordinates: "+currentCoord.lat.toFixed(5)+", "+currentCoord.lng.toFixed(5)+"\n"+
+"IP Address: "+randomIP()+"\n"+
+"Battery: "+Math.floor(Math.random()*100)+"%\n"+
+"Encryption: AES-256 Active\n\n"+
+"TARGET LOCATION IDENTIFIED.";
+
+typeWriter(document.getElementById("infoText"),text,10);
+
+if(map){map.remove();}
+map=L.map('map',{zoomControl:false}).setView([3.6,98.67],10);
+L.tileLayer(
+'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+{maxZoom:19}
+).addTo(map);
+
+setTimeout(()=>{map.flyTo([currentCoord.lat,currentCoord.lng],16,{duration:3});},1000);
+
+/* radar */
+let radar=document.createElement("div");
+radar.className="radar";
+document.getElementById("map").appendChild(radar);
+
+/* target */
+L.marker([currentCoord.lat,currentCoord.lng],{
+icon:L.divIcon({html:'<div class="target"></div>',iconSize:[20,20]})
+}).addTo(map);
+
+/* triangulation */
+for(let i=0;i<3;i++){
+let p=randomMedan();
+L.polyline([[p.lat,p.lng],[currentCoord.lat,currentCoord.lng]],{color:'red',weight:1,opacity:0.6}).addTo(map);
+}
+
+/* Google Maps button */
+document.getElementById("openMapBtn").onclick=function(){
+let url="https://www.google.com/maps/search/?api=1&query="+currentCoord.lat+","+currentCoord.lng;
+window.open(url,"_blank");
+};
+
+/* Google Earth Web button */
+document.getElementById("openEarthBtn").onclick=function(){
+let url=`https://earth.google.com/web/@${currentCoord.lat},${currentCoord.lng},100a,0d,0h,100z`;
+window.open(url,"_blank");
+};
+}
+</script>
+
+</body>
+</html>
